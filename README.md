@@ -1,71 +1,154 @@
-# Fabrication Calculator
+# Fabrication Calculator (Workshop Helper)
 
-Flutter app foundation for fabrication, construction, and machining calculators.
+A Flutter app for workshop and fabrication workflows that combines:
 
-## Architecture Rules
+- A built-in traditional calculator with expression history
+- User-managed formula groups and calculators
+- Draft and publish flow for custom calculators
+- Persistent local storage for formulas, history, and app settings
 
-- Riverpod is used for all state management.
-- Each calculator has its own provider file in `lib/providers`.
-- Calculator formulas are pure Dart functions and are kept separate from UI widgets.
-- Hive is used for calculator history persistence.
-- History loading and saving flows are handled through async Riverpod notifiers.
+The app title shown in UI is **Workshop Helper**.
 
-## Folder Structure
+## Features
+
+- Traditional calculator
+  - Supports standard operators and expression parsing
+  - In-app history sheet for quick reuse of past results
+- Formula management
+  - Create, rename, and delete formula groups
+  - Add, edit, duplicate, and delete calculators inside each group
+  - Draft vs published status for safer iteration
+- Custom calculator schema
+  - Define multiple input fields and output fields
+  - Assign icon, description, and ordering metadata
+- Sandbox validation
+  - Run test inputs against formula code before publishing
+  - Publishing requires a successful sandbox run
+- App settings
+  - Theme mode: Light / Dark / System
+  - Adjustable text zoom
+- Local persistence
+  - Data stored with Hive (no backend required)
+
+## Tech Stack
+
+- Flutter (Material 3)
+- Dart SDK ^3.12.1
+- State management: flutter_riverpod
+- Local storage: hive + hive_flutter
+- Formula parsing/evaluation: math_expressions
+- IDs: uuid
+
+## Project Structure
 
 ```text
 lib/
-	calculators/
-		unit_converter.dart
-		converter_widget.dart
-		measurement_utils.dart
-		unit_converter_formulas.dart
-	models/
-		converter_formula.dart
-		history_entry.dart
-	providers/
-		unit_converter_providers.dart
-		history_providers.dart
-		navigation_providers.dart
-	repositories/
-		history_repository.dart
-	main.dart
+  main.dart                         App bootstrap, Hive init, app shell
+  calculators/                      Converter and measurement helpers
+  models/                           Hive-backed data models
+  providers/                        Riverpod providers and controllers
+  repositories/                     Data access layer (Hive boxes)
+  screens/                          UI pages (calculator, manage, settings)
+  services/                         Sandbox execution and related logic
+test/
+  measurement_utils_test.dart
 ```
 
-## History Model
+## Getting Started
 
-`HistoryEntry` fields:
+### Prerequisites
 
-- `calculatorName` (`String`)
-- `inputs` (`Map<String, double>`)
-- `result` (`double`)
-- `timestamp` (`DateTime`)
+- Flutter SDK installed
+- A configured device/emulator (Android, iOS, web, or desktop target)
 
-## Current Foundation
+Check your environment:
 
-- Drawer navigation with last-used calculator restore.
-- Unit converter calculator scaffold using reusable converter widget.
-- Conversion utilities:
-	- millimeters <-> inches
-	- decimal inches <-> nearest workshop fraction lookup
-	- fraction string to decimal inches parser
-- History retention: latest 100 entries per calculator.
+```bash
+flutter doctor
+```
 
-## Add a New Calculator
-
-When adding a calculator, always do all of the following:
-
-1. Create calculator widget file in `lib/calculators/<calculator_name>.dart`.
-2. Create provider file or provider block in `lib/providers/<calculator_name>_providers.dart`.
-3. Implement formula logic in pure Dart functions (not inside widget build methods).
-4. Save history via `historyControllerProvider.notifier.saveEntry(...)`.
-5. Register calculator in `AppShell._calculators` inside `lib/main.dart`.
-6. Add any unit converter style formulas via `ConverterFormula` where applicable.
-
-## Useful Commands
+### Install Dependencies
 
 ```bash
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
-flutter analyze
+```
+
+### Run the App
+
+```bash
+flutter run
+```
+
+## Development Commands
+
+Run tests:
+
+```bash
 flutter test
 ```
+
+Regenerate Hive model adapters (when model fields/annotations change):
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+Optional continuous generation while editing models:
+
+```bash
+dart run build_runner watch --delete-conflicting-outputs
+```
+
+## How to Use
+
+1. Launch the app and open the drawer.
+2. Use **Calculator** for quick calculations.
+3. Open **Manage Formulas** to create a formula group.
+4. Add a formula and define input/output keys and labels.
+5. Enter formula code and run the sandbox test.
+6. Save as draft while iterating, then publish when validated.
+7. Open the formula group from the drawer to use published calculators.
+
+## Formula Authoring Notes
+
+The automatic sandbox currently validates the **math** code language.
+
+Math formula format is line-based assignment:
+
+```txt
+outputKey = expression;
+```
+
+Example:
+
+```txt
+area = width * height;
+perimeter = 2 * (width + height);
+```
+
+Rules:
+
+- Every output key must be assigned exactly once
+- Input and output keys must be valid identifiers (letters, numbers, underscore)
+- Use defined input/output keys only
+- Constants like `pi` and `e` are available in math expressions
+
+## Data Storage
+
+The app stores data locally using Hive boxes, including:
+
+- Formula groups
+- Managed calculators (draft/published)
+- Calculator history entries
+- App settings (theme, zoom, last selected calculator)
+
+## Roadmap
+
+Potential next enhancements based on current UI placeholders:
+
+- Formula export
+- Formula import
+
+## License
+
+No license file is currently included in this repository. Add a `LICENSE` file if you plan to distribute the project.

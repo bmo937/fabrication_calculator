@@ -11,7 +11,7 @@ The app title shown in UI is **Workshop Helper**.
 
 ## Features
 
-- Traditional calculator
+- Calculator
   - Supports standard operators and expression parsing
   - In-app history sheet for quick reuse of past results
 - Formula management

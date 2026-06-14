@@ -1,6 +1,7 @@
 import 'package:fabrication_calculator/models/calculator_group.dart';
 import 'package:fabrication_calculator/models/history_entry.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
+import 'package:fabrication_calculator/models/user_python_module.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
 import 'package:fabrication_calculator/providers/history_providers.dart';
 import 'package:fabrication_calculator/providers/navigation_providers.dart';
@@ -18,7 +19,9 @@ Future<void> main() async {
   Hive.registerAdapter(HistoryEntryAdapter());
   Hive.registerAdapter(CalculatorGroupAdapter());
   Hive.registerAdapter(ManagedCalculatorAdapter());
+  Hive.registerAdapter(UserPythonModuleAdapter());
   await Hive.openBox<HistoryEntry>('history_entries');
+  // Python module box is opened lazily by PythonModuleRepository.
 
   runApp(const ProviderScope(child: FabricationCalculatorApp()));
 }

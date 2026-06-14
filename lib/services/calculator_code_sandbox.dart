@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fabrication_calculator/models/calculator_field_definition.dart';
+import 'package:fabrication_calculator/services/python_sandbox.dart';
 import 'package:math_expressions/math_expressions.dart';
 
 class SandboxExecutionResult {
@@ -15,8 +16,17 @@ class CalculatorCodeSandbox {
   static final GrammarParser _parser = GrammarParser();
   static final RegExp _linePattern = RegExp(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;?$');
 
-  static bool supportsAutomaticSandbox(String codeLanguage) => codeLanguage == 'math';
+  /// Returns [true] for languages that have an automatic sandbox available.
+  ///
+  /// - [math] runs synchronously via [execute].
+  /// - [python] runs asynchronously via [PythonSandbox.execute].
+  ///
+  /// Only "math" and "python" are valid code languages.
+  static bool supportsAutomaticSandbox(String codeLanguage) => codeLanguage == 'math' || codeLanguage == 'python';
 
+  /// Execute a [math]-language calculator synchronously.
+  ///
+  /// For Python calculators use [PythonSandbox.execute] instead.
   static SandboxExecutionResult execute({
     required String codeBody,
     required List<CalculatorFieldDefinition> inputs,
@@ -24,8 +34,13 @@ class CalculatorCodeSandbox {
     required Map<String, double> inputValues,
     required String codeLanguage,
   }) {
-    if (!supportsAutomaticSandbox(codeLanguage)) {
-      return SandboxExecutionResult(success: false, error: 'Automatic sandbox is unavailable for $codeLanguage. Use manual verification.');
+    if (codeLanguage != 'math') {
+      return SandboxExecutionResult(
+        success: false,
+        error:
+            'CalculatorCodeSandbox.execute() only supports the "math" language. '
+            'Use PythonSandbox.execute() for Python calculators.',
+      );
     }
 
     if (outputs.isEmpty) {

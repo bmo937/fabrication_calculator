@@ -4,6 +4,7 @@ import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
 import 'package:fabrication_calculator/services/calculator_code_sandbox.dart';
+import 'package:fabrication_calculator/services/python_sandbox.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -34,6 +35,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
   Map<String, double> _sandboxOutputs = <String, double>{};
   String? _testError;
   bool _saving = false;
+  bool _isRunningTest = false;
 
   final List<_FieldDefinitionRow> _inputRows = <_FieldDefinitionRow>[];
   final List<_FieldDefinitionRow> _outputRows = <_FieldDefinitionRow>[];
@@ -47,7 +49,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
     _codeController = TextEditingController();
 
     _selectedGroupId = calc?.groupId ?? widget.initialGroupId;
-    _selectedCodeLanguage = calc?.codeLanguage ?? 'math';
+    _selectedCodeLanguage = ManagedCalculator.normalizeCodeLanguage(calc?.codeLanguage ?? ManagedCalculator.mathLanguage);
     _selectedIconKey = calc?.iconKey ?? 'function';
     _sandboxTestPassed = calc?.sandboxTestPassed ?? false;
     _testError = (calc?.sandboxLastError ?? '').isEmpty ? null : calc!.sandboxLastError;
@@ -112,26 +114,16 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
     }
 
     if (selectedLanguage == 'python') {
-      return 'def run_calculator(inputs):\n'
-          '    return {\n'
-          '${outputs.map((CalculatorFieldDefinition o) => '        "${o.key}": 0,').join('\n')}\n'
-          '    }';
-    }
-
-    if (selectedLanguage == 'julia') {
-      return 'function run_calculator(inputs)\n'
-          '    return Dict(\n'
-          '${outputs.map((CalculatorFieldDefinition o) => '        :${o.key} => 0,').join('\n')}\n'
-          '    )\n'
-          'end';
-    }
-
-    if (selectedLanguage == 'dart') {
-      return 'Map<String, dynamic> runCalculator(Map<String, double> input) {\n'
-          '  return <String, dynamic>{\n'
-          '${outputs.map((CalculatorFieldDefinition o) => '    \'${o.key}\': 0,').join('\n')}\n'
-          '  };\n'
-          '}';
+      // Inputs are injected directly as variables. Assign each output variable.
+      final StringBuffer buf = StringBuffer();
+      buf.writeln('# Inputs are available as variables (e.g. thickness, length)');
+      buf.writeln('# Assign each output variable directly:');
+      buf.writeln('# from workshop_helpers.geometry import bend_allowance  # optional');
+      buf.writeln();
+      for (final CalculatorFieldDefinition o in outputs) {
+        buf.writeln('${o.key} = 0  # replace with your formula');
+      }
+      return buf.toString().trimRight();
     }
 
     return outputs.map((CalculatorFieldDefinition o) => '${o.key} = 0;').join('\n');
@@ -195,7 +187,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       inputDefinitionsJson: CalculatorFieldDefinition.listToJson(inputs),
       outputDefinitionsJson: CalculatorFieldDefinition.listToJson(outputs),
       sandboxLastError: _testError ?? '',
-      codeLanguage: _selectedCodeLanguage,
+      codeLanguage: ManagedCalculator.normalizeCodeLanguage(_selectedCodeLanguage),
       iconKey: _selectedIconKey,
     );
 
@@ -286,15 +278,6 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       return;
     }
 
-    if (!CalculatorCodeSandbox.supportsAutomaticSandbox(_selectedCodeLanguage)) {
-      setState(() {
-        _sandboxOutputs = <String, double>{};
-        _sandboxTestPassed = false;
-        _testError = 'Automatic sandbox is unavailable for ${_codeLanguageLabel(_selectedCodeLanguage)}. Use manual verification.';
-      });
-      return;
-    }
-
     final List<CalculatorFieldDefinition> inputs = _collectInputs();
     final List<CalculatorFieldDefinition> outputs = _collectOutputs();
     final Map<String, double> testInputs = <String, double>{};
@@ -314,12 +297,20 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       testInputs[key] = value;
     }
 
+    if (_selectedCodeLanguage == ManagedCalculator.pythonLanguage) {
+      _runPythonSandbox(inputs, outputs, testInputs);
+    } else {
+      _runMathSandbox(inputs, outputs, testInputs);
+    }
+  }
+
+  void _runMathSandbox(List<CalculatorFieldDefinition> inputs, List<CalculatorFieldDefinition> outputs, Map<String, double> testInputs) {
     final SandboxExecutionResult result = CalculatorCodeSandbox.execute(
       codeBody: _codeController.text,
       inputs: inputs,
       outputs: outputs,
       inputValues: testInputs,
-      codeLanguage: _selectedCodeLanguage,
+      codeLanguage: 'math',
     );
 
     if (!result.success) {
@@ -331,12 +322,41 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       return;
     }
 
-    final Map<String, double> labeledOutputs = <String, double>{};
-    for (final CalculatorFieldDefinition output in outputs) {
-      labeledOutputs[output.label] = result.outputs[output.key] ?? 0;
-    }
+    final Map<String, double> labeledOutputs = <String, double>{for (final CalculatorFieldDefinition output in outputs) output.label: result.outputs[output.key] ?? 0};
 
     setState(() {
+      _sandboxOutputs = labeledOutputs;
+      _sandboxTestPassed = true;
+      _testError = null;
+    });
+  }
+
+  Future<void> _runPythonSandbox(List<CalculatorFieldDefinition> inputs, List<CalculatorFieldDefinition> outputs, Map<String, double> testInputs) async {
+    setState(() {
+      _isRunningTest = true;
+      _sandboxOutputs = <String, double>{};
+      _sandboxTestPassed = false;
+      _testError = null;
+    });
+
+    final SandboxExecutionResult result = await PythonSandbox.execute(codeBody: _codeController.text, inputs: inputs, outputs: outputs, inputValues: testInputs);
+
+    if (!mounted) return;
+
+    if (!result.success) {
+      setState(() {
+        _isRunningTest = false;
+        _sandboxOutputs = <String, double>{};
+        _sandboxTestPassed = false;
+        _testError = result.error;
+      });
+      return;
+    }
+
+    final Map<String, double> labeledOutputs = <String, double>{for (final CalculatorFieldDefinition output in outputs) output.label: result.outputs[output.key] ?? 0};
+
+    setState(() {
+      _isRunningTest = false;
       _sandboxOutputs = labeledOutputs;
       _sandboxTestPassed = true;
       _testError = null;
@@ -370,19 +390,6 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       _sandboxOutputs = <String, double>{};
       _testError = null;
     });
-  }
-
-  String _codeLanguageLabel(String codeLanguage) {
-    switch (codeLanguage) {
-      case 'python':
-        return 'Python';
-      case 'julia':
-        return 'Julia';
-      case 'dart':
-        return 'Dart';
-      default:
-        return 'Math Sandbox';
-    }
   }
 
   void _insertAtCursor(String insertion) {
@@ -441,7 +448,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: <Widget>[_languageChip('math', 'Math Sandbox'), _languageChip('dart', 'Dart'), _languageChip('python', 'Python'), _languageChip('julia', 'Julia')],
+          children: <Widget>[_languageChip(ManagedCalculator.mathLanguage, 'Math Sandbox'), _languageChip(ManagedCalculator.pythonLanguage, 'Python')],
         ),
       ],
     );
@@ -475,14 +482,6 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
         });
       },
     );
-  }
-
-  void _markManualVerificationPassed() {
-    setState(() {
-      _sandboxTestPassed = true;
-      _sandboxOutputs = <String, double>{};
-      _testError = null;
-    });
   }
 
   void _removeInputRow(int index) {
@@ -659,18 +658,43 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          _selectedCodeLanguage == 'math'
+          _selectedCodeLanguage == ManagedCalculator.mathLanguage
               ? 'One assignment per line, e.g. area = length * width; each output key must be assigned once.'
-              : 'Python/Dart/Julia authoring is supported in this editor. Use helper chips to insert keys quickly.',
+              : 'Inputs are available as plain variables. Assign each output variable directly.\n'
+                    'Import helpers: from workshop_helpers.geometry import bend_allowance',
           style: Theme.of(context).textTheme.bodySmall,
         ),
+        if (_selectedCodeLanguage == ManagedCalculator.pythonLanguage) ...<Widget>[
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text('Python Examples', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    'Basic:\n'
+                    'area = length * width\n\n'
+                    'Shared helper import:\n'
+                    'from workshop_helpers.geometry import bend_allowance\n'
+                    'ba = bend_allowance(thickness, 90, radius)\n\n'
+                    'Lookup helper:\n'
+                    'from workshop_helpers.lookup_tables import interpolate\n'
+                    'k = interpolate([(1, 10), (2, 20), (3, 30)], size)',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
   Widget _buildSandboxSection(BuildContext context) {
-    final bool autoSandbox = CalculatorCodeSandbox.supportsAutomaticSandbox(_selectedCodeLanguage);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -678,17 +702,18 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
           children: <Widget>[
             Text('Sandbox Test', style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
-            if (autoSandbox)
-              ElevatedButton(onPressed: _runSandbox, child: const Text('Run Test'))
+            if (_isRunningTest)
+              const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
             else
-              ElevatedButton(onPressed: _markManualVerificationPassed, child: const Text('Mark Test Passed (Manual)')),
+              ElevatedButton(onPressed: _runSandbox, child: const Text('Run Test')),
           ],
         ),
-        if (!autoSandbox)
+        if (_selectedCodeLanguage == ManagedCalculator.pythonLanguage)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'Automatic sandbox is unavailable for ${_codeLanguageLabel(_selectedCodeLanguage)}. Review code manually, then mark test passed.',
+              'Python runs in a sandboxed subprocess. Only math and workshop_helpers imports are permitted. '
+              'Execution is limited to 5 seconds. No filesystem or network access.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

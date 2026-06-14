@@ -13,7 +13,9 @@ class ManagedCalculatorAdapter extends TypeAdapter<ManagedCalculator> {
   @override
   ManagedCalculator read(BinaryReader reader) {
     final numOfFields = reader.readByte();
-    final fields = <int, dynamic>{for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read()};
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
     return ManagedCalculator(
       id: fields[0] as String,
       groupId: fields[1] as String,
@@ -23,18 +25,18 @@ class ManagedCalculatorAdapter extends TypeAdapter<ManagedCalculator> {
       outputLabel: fields[5] as String,
       formulaExpression: fields[6] as String?,
       lookupEntriesJson: fields[7] as String?,
-      sortOrder: (fields[8] as int?) ?? 0,
-      description: (fields[9] as String?) ?? '',
-      isDraft: (fields[10] as bool?) ?? false,
-      sandboxTestPassed: (fields[11] as bool?) ?? false,
+      sortOrder: fields[8] as int,
+      description: fields[9] as String,
+      isDraft: fields[10] as bool,
+      sandboxTestPassed: fields[11] as bool,
       lastSandboxTestAt: fields[12] as DateTime?,
       publishedAt: fields[13] as DateTime?,
-      codeBody: (fields[14] as String?) ?? '',
-      inputDefinitionsJson: (fields[15] as String?) ?? '',
-      outputDefinitionsJson: (fields[16] as String?) ?? '',
-      sandboxLastError: (fields[17] as String?) ?? '',
-      codeLanguage: (fields[18] as String?) ?? 'math',
-      iconKey: (fields[19] as String?) ?? 'function',
+      codeBody: fields[14] as String,
+      inputDefinitionsJson: fields[15] as String,
+      outputDefinitionsJson: fields[16] as String,
+      sandboxLastError: fields[17] as String,
+      codeLanguage: fields[18] as String,
+      iconKey: fields[19] as String,
     );
   }
 
@@ -88,5 +90,9 @@ class ManagedCalculatorAdapter extends TypeAdapter<ManagedCalculator> {
   int get hashCode => typeId.hashCode;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is ManagedCalculatorAdapter && runtimeType == other.runtimeType && typeId == other.typeId;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ManagedCalculatorAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }

@@ -91,6 +91,18 @@ class ManagedCalculator {
   @HiveField(19)
   final String iconKey;
 
+  static const String mathLanguage = 'math';
+  static const String pythonLanguage = 'python';
+  static const Set<String> supportedCodeLanguages = <String>{mathLanguage, pythonLanguage};
+
+  static bool isSupportedCodeLanguage(String language) => supportedCodeLanguages.contains(language);
+
+  static String normalizeCodeLanguage(String language) {
+    return isSupportedCodeLanguage(language) ? language : mathLanguage;
+  }
+
+  String get normalizedCodeLanguage => normalizeCodeLanguage(codeLanguage);
+
   bool get isPublished => !isDraft;
 
   List<CalculatorFieldDefinition> get inputDefinitions {

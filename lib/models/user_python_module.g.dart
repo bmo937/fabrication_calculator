@@ -1,38 +1,47 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'calculator_group.dart';
+part of 'user_python_module.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class CalculatorGroupAdapter extends TypeAdapter<CalculatorGroup> {
+class UserPythonModuleAdapter extends TypeAdapter<UserPythonModule> {
   @override
-  final int typeId = 2;
+  final int typeId = 4;
 
   @override
-  CalculatorGroup read(BinaryReader reader) {
+  UserPythonModule read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return CalculatorGroup(
+    return UserPythonModule(
       id: fields[0] as String,
       name: fields[1] as String,
-      sortOrder: fields[2] as int,
+      code: fields[2] as String,
+      description: fields[3] as String,
+      createdAt: fields[4] as DateTime,
+      updatedAt: fields[5] as DateTime,
     );
   }
 
   @override
-  void write(BinaryWriter writer, CalculatorGroup obj) {
+  void write(BinaryWriter writer, UserPythonModule obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.sortOrder);
+      ..write(obj.code)
+      ..writeByte(3)
+      ..write(obj.description)
+      ..writeByte(4)
+      ..write(obj.createdAt)
+      ..writeByte(5)
+      ..write(obj.updatedAt);
   }
 
   @override
@@ -41,7 +50,7 @@ class CalculatorGroupAdapter extends TypeAdapter<CalculatorGroup> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is CalculatorGroupAdapter &&
+      other is UserPythonModuleAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

@@ -6,6 +6,7 @@ import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/history_providers.dart';
 import 'package:fabrication_calculator/services/calculator_code_sandbox.dart';
 import 'package:fabrication_calculator/services/formula_evaluator.dart';
+import 'package:fabrication_calculator/services/python_sandbox.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,6 +24,7 @@ class _ManagedCalculatorPageState extends ConsumerState<ManagedCalculatorPage> {
   final Map<String, double> _codeOutputs = <String, double>{};
   double? _legacyResult;
   String? _errorText;
+  bool _isCalculating = false;
 
   @override
   void initState() {
@@ -127,15 +129,6 @@ class _ManagedCalculatorPageState extends ConsumerState<ManagedCalculatorPage> {
   }
 
   void _calculateCode() {
-    if (!CalculatorCodeSandbox.supportsAutomaticSandbox(widget.calculator.codeLanguage)) {
-      setState(() {
-        _errorText = 'Runtime execution is not available yet for ${widget.calculator.codeLanguage}. This calculator is currently authoring-only.';
-        _codeOutputs.clear();
-        _legacyResult = null;
-      });
-      return;
-    }
-
     final List<CalculatorFieldDefinition> inputs = widget.calculator.inputDefinitions;
     final List<CalculatorFieldDefinition> outputs = widget.calculator.outputDefinitions;
 
@@ -154,12 +147,20 @@ class _ManagedCalculatorPageState extends ConsumerState<ManagedCalculatorPage> {
       inputValues[input.key] = value;
     }
 
+    if (widget.calculator.normalizedCodeLanguage == ManagedCalculator.pythonLanguage) {
+      _calculatePython(inputs, outputs, inputValues);
+    } else {
+      _calculateMath(inputs, outputs, inputValues);
+    }
+  }
+
+  void _calculateMath(List<CalculatorFieldDefinition> inputs, List<CalculatorFieldDefinition> outputs, Map<String, double> inputValues) {
     final SandboxExecutionResult execution = CalculatorCodeSandbox.execute(
       codeBody: widget.calculator.codeBody,
       inputs: inputs,
       outputs: outputs,
       inputValues: inputValues,
-      codeLanguage: widget.calculator.codeLanguage,
+      codeLanguage: 'math',
     );
 
     if (!execution.success) {
@@ -172,6 +173,41 @@ class _ManagedCalculatorPageState extends ConsumerState<ManagedCalculatorPage> {
     }
 
     setState(() {
+      _errorText = null;
+      _legacyResult = null;
+      _codeOutputs
+        ..clear()
+        ..addAll(execution.outputs);
+    });
+
+    final double primaryResult = execution.outputs[outputs.first.key] ?? 0;
+    ref
+        .read(historyControllerProvider.notifier)
+        .saveEntry(HistoryEntry(calculatorName: widget.calculator.name, inputs: inputValues, result: primaryResult, timestamp: DateTime.now()));
+  }
+
+  Future<void> _calculatePython(List<CalculatorFieldDefinition> inputs, List<CalculatorFieldDefinition> outputs, Map<String, double> inputValues) async {
+    setState(() {
+      _isCalculating = true;
+      _errorText = null;
+    });
+
+    final SandboxExecutionResult execution = await PythonSandbox.execute(codeBody: widget.calculator.codeBody, inputs: inputs, outputs: outputs, inputValues: inputValues);
+
+    if (!mounted) return;
+
+    if (!execution.success) {
+      setState(() {
+        _isCalculating = false;
+        _errorText = execution.error ?? 'Python execution failed.';
+        _codeOutputs.clear();
+        _legacyResult = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isCalculating = false;
       _errorText = null;
       _legacyResult = null;
       _codeOutputs
@@ -223,28 +259,15 @@ class _ManagedCalculatorPageState extends ConsumerState<ManagedCalculatorPage> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  if (widget.calculator.calculatorType == 'code' && !CalculatorCodeSandbox.supportsAutomaticSandbox(widget.calculator.codeLanguage)) ...<Widget>[
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text('Runtime execution unavailable for ${widget.calculator.codeLanguage}', style: Theme.of(context).textTheme.labelLarge),
-                            const SizedBox(height: 8),
-                            SelectableText(widget.calculator.codeBody, style: Theme.of(context).textTheme.bodySmall),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: <Widget>[
-                      ElevatedButton(onPressed: _calculate, child: const Text('Calculate')),
+                      ElevatedButton(
+                        onPressed: _isCalculating ? null : _calculate,
+                        child: _isCalculating ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Calculate'),
+                      ),
                       const SizedBox(width: 8),
-                      OutlinedButton(onPressed: _clear, child: const Text('Clear')),
+                      OutlinedButton(onPressed: _isCalculating ? null : _clear, child: const Text('Clear')),
                     ],
                   ),
                   const SizedBox(height: 16),

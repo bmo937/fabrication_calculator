@@ -86,6 +86,13 @@ class ManageScreen extends ConsumerWidget {
     );
   }
 
+  static List<T> _moveItem<T>(List<T> items, int oldIndex, int newIndex) {
+    final List<T> updated = List<T>.of(items);
+    final T moved = updated.removeAt(oldIndex);
+    updated.insert(newIndex, moved);
+    return updated;
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -115,83 +122,143 @@ class ManageScreen extends ConsumerWidget {
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
-            children: <Widget>[
-              if (allDrafts.isNotEmpty)
-                Card(
-                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          child: Text('Drafts', style: Theme.of(context).textTheme.titleSmall),
-                        ),
-                        for (final ManagedCalculator draft in allDrafts)
-                          _DraftTile(
-                            calculator: draft,
-                            groupName: groups.where((CalculatorGroup g) => g.id == draft.groupId).map((CalculatorGroup g) => g.name).firstOrNull ?? 'Unknown Group',
-                            onEdit: () => _openCalculatorEditor(context, calculator: draft),
-                            onDuplicate: () => ref.read(managedCalculatorsProvider.notifier).duplicate(draft.id),
-                            onDelete: () => _confirmDeleteCalculator(context, ref, draft),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              for (final CalculatorGroup group in groups)
-                () {
-                  final List<ManagedCalculator> groupCalcs = allCalcs.where((ManagedCalculator c) => c.groupId == group.id).toList()
-                    ..sort((ManagedCalculator a, ManagedCalculator b) => a.sortOrder.compareTo(b.sortOrder));
-                  final List<ManagedCalculator> publishedCalcs = groupCalcs.where((ManagedCalculator c) => !c.isDraft).toList();
-                  final int publishedCount = publishedCalcs.length;
-                  final int draftCount = groupCalcs.length - publishedCount;
+          final List<CalculatorGroup> orderedGroups = List<CalculatorGroup>.of(groups)..sort((CalculatorGroup a, CalculatorGroup b) => a.sortOrder.compareTo(b.sortOrder));
 
-                  return Card(
+          final Widget header = Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('Organize Formulas', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 6),
+                    Text('Drag groups to reorder sections and drag formulas within a group to control calculator order.', style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+          return ReorderableListView.builder(
+            buildDefaultDragHandles: false,
+            header: Column(
+              children: <Widget>[
+                header,
+                if (allDrafts.isNotEmpty)
+                  Card(
                     margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                      title: Text(group.name, style: Theme.of(context).textTheme.titleMedium),
-                      subtitle: Text('$publishedCount published • $draftCount draft'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          IconButton(tooltip: 'Rename', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showEditGroupDialog(context, ref, group)),
-                          IconButton(
-                            tooltip: 'Delete',
-                            icon: const Icon(Icons.delete_outline, size: 20),
-                            onPressed: () => _confirmDeleteGroup(context, ref, group, groupCalcs.length),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+                            child: Text('Draft Queue', style: Theme.of(context).textTheme.titleSmall),
                           ),
-                          const Icon(Icons.expand_more),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                            child: Text('Draft formulas stay here until published.', style: Theme.of(context).textTheme.bodySmall),
+                          ),
+                          for (final ManagedCalculator draft in allDrafts)
+                            _DraftTile(
+                              calculator: draft,
+                              groupName: groups.where((CalculatorGroup g) => g.id == draft.groupId).map((CalculatorGroup g) => g.name).firstOrNull ?? 'Unknown Group',
+                              onEdit: () => _openCalculatorEditor(context, calculator: draft),
+                              onDuplicate: () => ref.read(managedCalculatorsProvider.notifier).duplicate(draft.id),
+                              onDelete: () => _confirmDeleteCalculator(context, ref, draft),
+                            ),
                         ],
                       ),
-                      children: <Widget>[
-                        if (publishedCalcs.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                            child: Text('No published calculators in this group.', style: Theme.of(context).textTheme.bodySmall),
-                          ),
-                        for (final ManagedCalculator calc in publishedCalcs)
-                          _CalculatorTile(
+                    ),
+                  ),
+              ],
+            ),
+            padding: const EdgeInsets.only(bottom: 88),
+            itemCount: orderedGroups.length,
+            onReorderItem: (int oldIndex, int newIndex) {
+              final List<CalculatorGroup> reordered = _moveItem<CalculatorGroup>(orderedGroups, oldIndex, newIndex);
+              ref.read(calculatorGroupsProvider.notifier).reorderGroups(reordered);
+            },
+            itemBuilder: (BuildContext context, int index) {
+              final CalculatorGroup group = orderedGroups[index];
+              final List<ManagedCalculator> groupCalcs = allCalcs.where((ManagedCalculator c) => c.groupId == group.id).toList()
+                ..sort((ManagedCalculator a, ManagedCalculator b) => a.sortOrder.compareTo(b.sortOrder));
+              final List<ManagedCalculator> publishedCalcs = groupCalcs.where((ManagedCalculator c) => !c.isDraft).toList();
+              final int publishedCount = publishedCalcs.length;
+              final int draftCount = groupCalcs.length - publishedCount;
+
+              return Card(
+                key: ValueKey<String>('group-${group.id}'),
+                margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                child: ExpansionTile(
+                  maintainState: true,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(Icons.folder_open_outlined),
+                  title: Text(group.name, style: Theme.of(context).textTheme.titleMedium),
+                  subtitle: Text('$publishedCount published • $draftCount draft'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      IconButton(tooltip: 'Rename', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showEditGroupDialog(context, ref, group)),
+                      IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => _confirmDeleteGroup(context, ref, group, groupCalcs.length)),
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.drag_indicator)),
+                      ),
+                    ],
+                  ),
+                  children: <Widget>[
+                    if (publishedCalcs.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: Text('No published calculators in this group.', style: Theme.of(context).textTheme.bodySmall),
+                      )
+                    else
+                      ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: publishedCalcs.length,
+                        onReorderItem: (int oldIndex, int newIndex) {
+                          final List<ManagedCalculator> reordered = _moveItem<ManagedCalculator>(publishedCalcs, oldIndex, newIndex);
+                          ref.read(managedCalculatorsProvider.notifier).reorderPublishedInGroup(group.id, reordered);
+                        },
+                        itemBuilder: (BuildContext context, int calcIndex) {
+                          final ManagedCalculator calc = publishedCalcs[calcIndex];
+                          return _CalculatorTile(
+                            key: ValueKey<String>('calc-${calc.id}'),
                             calculator: calc,
+                            dragHandle: ReorderableDragStartListener(
+                              index: calcIndex,
+                              child: const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.drag_indicator)),
+                            ),
                             onEdit: () => _openCalculatorEditor(context, calculator: calc),
                             onDuplicate: () => ref.read(managedCalculatorsProvider.notifier).duplicate(calc.id),
                             onDelete: () => _confirmDeleteCalculator(context, ref, calc),
-                          ),
-                        ListTile(
-                          dense: true,
-                          leading: Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
-                          title: Text('Add Formula', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                          onTap: () => _openCalculatorEditor(context, initialGroupId: group.id),
-                        ),
-                      ],
+                          );
+                        },
+                      ),
+                    ListTile(
+                      dense: true,
+                      leading: Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
+                      title: Text('Add Formula', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                      onTap: () => _openCalculatorEditor(context, initialGroupId: group.id),
                     ),
-                  );
-                }(),
-            ],
+                  ],
+                ),
+              );
+            },
           );
         },
       ),
@@ -251,9 +318,10 @@ class _GroupNameDialogState extends State<_GroupNameDialog> {
 // ── Calculator tile ────────────────────────────────────────────────────────────
 
 class _CalculatorTile extends StatelessWidget {
-  const _CalculatorTile({required this.calculator, required this.onEdit, required this.onDuplicate, required this.onDelete});
+  const _CalculatorTile({super.key, required this.calculator, this.dragHandle, required this.onEdit, required this.onDuplicate, required this.onDelete});
 
   final ManagedCalculator calculator;
+  final Widget? dragHandle;
   final VoidCallback onEdit;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
@@ -308,6 +376,7 @@ class _CalculatorTile extends StatelessWidget {
               onDelete();
           }
         },
+        child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[const Icon(Icons.more_vert), ?dragHandle]),
       ),
     );
   }

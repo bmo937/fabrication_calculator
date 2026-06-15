@@ -30,6 +30,12 @@ class CalculatorRepository {
     await box.put(group.id, group);
   }
 
+  Future<void> updateGroupSortOrders(List<CalculatorGroup> groups) async {
+    final Box<CalculatorGroup> box = await _openGroupsBox();
+    final Map<String, CalculatorGroup> updates = <String, CalculatorGroup>{for (final CalculatorGroup group in groups) group.id: group};
+    await box.putAll(updates);
+  }
+
   Future<void> deleteGroup(String groupId) async {
     final Box<CalculatorGroup> groupBox = await _openGroupsBox();
     await groupBox.delete(groupId);
@@ -57,6 +63,12 @@ class CalculatorRepository {
   Future<void> saveCalculator(ManagedCalculator calculator) async {
     final Box<ManagedCalculator> box = await _openCalculatorsBox();
     await box.put(calculator.id, calculator);
+  }
+
+  Future<void> updateCalculatorSortOrders(List<ManagedCalculator> calculators) async {
+    final Box<ManagedCalculator> box = await _openCalculatorsBox();
+    final Map<String, ManagedCalculator> updates = <String, ManagedCalculator>{for (final ManagedCalculator calculator in calculators) calculator.id: calculator};
+    await box.putAll(updates);
   }
 
   Future<void> saveDraft(ManagedCalculator calculator) async {

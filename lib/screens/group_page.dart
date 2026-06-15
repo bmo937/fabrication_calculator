@@ -30,7 +30,7 @@ class GroupPage extends ConsumerWidget {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
       itemCount: calculators.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (BuildContext context, int index) {
@@ -38,7 +38,13 @@ class GroupPage extends ConsumerWidget {
         final FormulaIconOption iconOption = formulaIconByKey(calc.iconKey);
         return Card(
           child: ListTile(
-            leading: CircleAvatar(radius: 14, child: Text(iconOption.glyph, style: const TextStyle(fontSize: 14))),
+            contentPadding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+            leading: CircleAvatar(
+              radius: 18,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+              child: Text(iconOption.glyph, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
             title: Text(calc.name),
             subtitle: calc.description.isNotEmpty ? Text(calc.description, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),

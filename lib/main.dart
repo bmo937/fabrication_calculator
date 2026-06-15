@@ -8,6 +8,7 @@ import 'package:fabrication_calculator/screens/group_page.dart';
 import 'package:fabrication_calculator/screens/manage_screen.dart';
 import 'package:fabrication_calculator/screens/settings_screen.dart';
 import 'package:fabrication_calculator/screens/traditional_calculator_screen.dart';
+import 'package:fabrication_calculator/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -43,8 +44,8 @@ class _AppRoot extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Workshop Helper',
-      theme: ThemeData(colorSchemeSeed: Colors.blueGrey, useMaterial3: true),
-      darkTheme: ThemeData(colorSchemeSeed: Colors.blueGrey, useMaterial3: true, brightness: Brightness.dark),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       builder: (BuildContext context, Widget? child) {
         if (child == null) return const SizedBox.shrink();
@@ -151,10 +152,24 @@ class _AppDrawer extends ConsumerWidget {
           padding: EdgeInsets.zero,
           children: <Widget>[
             // ── Header ─────────────────────────────────────────────────
-            const DrawerHeader(
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: Text('Workshop\nHelper', style: TextStyle(fontSize: 18)),
+            DrawerHeader(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
+                  ),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Text('Workshop\nHelper', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                  ),
+                ),
               ),
             ),
             // ── Built-in calculators ───────────────────────────────────

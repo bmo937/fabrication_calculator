@@ -30,6 +30,12 @@ class CalculatorGroupsNotifier extends AsyncNotifier<List<CalculatorGroup>> {
     ref.invalidateSelf();
   }
 
+  Future<void> reorderGroups(List<CalculatorGroup> reordered) async {
+    final List<CalculatorGroup> normalized = <CalculatorGroup>[for (int i = 0; i < reordered.length; i++) reordered[i].copyWith(sortOrder: i)];
+    await _repo.updateGroupSortOrders(normalized);
+    ref.invalidateSelf();
+  }
+
   Future<void> delete(String id) async {
     await _repo.deleteGroup(id);
     // Cascade delete handled in repo; refresh calculators too
@@ -60,6 +66,23 @@ class ManagedCalculatorsNotifier extends AsyncNotifier<List<ManagedCalculator>> 
 
   Future<void> updateCalculator(ManagedCalculator calculator) async {
     await _repo.saveCalculator(calculator);
+    ref.invalidateSelf();
+  }
+
+  Future<void> reorderPublishedInGroup(String groupId, List<ManagedCalculator> reorderedPublished) async {
+    final List<ManagedCalculator> current = state.valueOrNull ?? <ManagedCalculator>[];
+    final List<ManagedCalculator> draftsInGroup = current.where((ManagedCalculator c) => c.groupId == groupId && c.isDraft).toList()
+      ..sort((ManagedCalculator a, ManagedCalculator b) => a.sortOrder.compareTo(b.sortOrder));
+
+    final List<ManagedCalculator> normalized = <ManagedCalculator>[];
+    for (int i = 0; i < reorderedPublished.length; i++) {
+      normalized.add(reorderedPublished[i].copyWith(sortOrder: i));
+    }
+    for (int i = 0; i < draftsInGroup.length; i++) {
+      normalized.add(draftsInGroup[i].copyWith(sortOrder: reorderedPublished.length + i));
+    }
+
+    await _repo.updateCalculatorSortOrders(normalized);
     ref.invalidateSelf();
   }
 

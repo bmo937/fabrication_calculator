@@ -13,7 +13,7 @@ class _TraditionalCalculatorScreenState extends State<TraditionalCalculatorScree
   String _display = '0';
   final List<_HistoryEntry> _history = <_HistoryEntry>[];
 
-  static const List<String> _buttons = <String>['C', '⌫', '%', '/', '7', '8', '9', '*', '4', '5', '6', '-', '1', '2', '3', '+', '()', '0', '.', '='];
+  static const List<String> _buttons = <String>['C', '⌫', '%', '/', '7', '8', '9', '*', '4', '5', '6', '-', '1', '2', '3', '+', '( )', '0', '.', '='];
 
   static const Set<String> _operators = <String>{'+', '-', '*', '/', '%'};
 
@@ -32,7 +32,7 @@ class _TraditionalCalculatorScreenState extends State<TraditionalCalculatorScree
           _display = _expression.isEmpty ? '0' : _expression;
         });
         return;
-      case '()':
+      case '( )':
         _appendBracketFromSingleButton();
         return;
       case '=':

@@ -76,7 +76,9 @@ class AppTheme {
   }
 
   static ThemeData _buildTheme(ColorScheme colorScheme) {
-    final TextTheme baseText = GoogleFonts.manropeTextTheme();
+    final Brightness brightness = colorScheme.brightness;
+    final TextTheme materialText = ThemeData(useMaterial3: true, brightness: brightness, colorScheme: colorScheme).textTheme;
+    final TextTheme baseText = GoogleFonts.manropeTextTheme(materialText).apply(bodyColor: colorScheme.onSurface, displayColor: colorScheme.onSurface);
     final TextTheme textTheme = baseText.copyWith(
       headlineSmall: baseText.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
       titleLarge: baseText.titleLarge?.copyWith(fontWeight: FontWeight.w700),

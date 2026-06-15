@@ -163,11 +163,11 @@ class _AppDrawer extends ConsumerWidget {
                     colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
                   ),
                 ),
-                child: const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                   child: Align(
                     alignment: Alignment.bottomLeft,
-                    child: Text('Workshop\nHelper', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    child: Text('Workshop\nHelper', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ),

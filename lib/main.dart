@@ -94,18 +94,7 @@ class AppShell extends ConsumerWidget {
         final Widget body = _resolveBody(routeId, groups);
 
         return Scaffold(
-          appBar: AppBar(
-            title: Row(
-              children: <Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset('assets/fabrication_calculator.png', width: 28, height: 28, fit: BoxFit.cover),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: Text(appBarTitle, overflow: TextOverflow.ellipsis)),
-              ],
-            ),
-          ),
+          appBar: AppBar(title: Text(appBarTitle)),
           drawer: _AppDrawer(activeRouteId: routeId, groups: groups, builtIns: _builtIns),
           body: body,
         );
@@ -167,20 +156,23 @@ class _AppDrawer extends ConsumerWidget {
           padding: EdgeInsets.zero,
           children: <Widget>[
             // ── Header ─────────────────────────────────────────────────
-            DrawerHeader(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
+            SizedBox(
+              height: 320,
+              child: DrawerHeader(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
+                    ),
                   ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                  child: Center(child: Image.asset('assets/fabrication_calculator.png', fit: BoxFit.contain)),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                    child: Center(child: Image.asset('assets/fabrication_calculator.png', width: 300, fit: BoxFit.contain)),
+                  ),
                 ),
               ),
             ),

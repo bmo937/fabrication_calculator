@@ -4,6 +4,7 @@ import 'package:fabrication_calculator/models/history_entry.dart';
 import 'package:fabrication_calculator/models/lookup_entry.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/history_providers.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/services/calculator_code_sandbox.dart';
 import 'package:fabrication_calculator/services/formula_evaluator.dart';
 import 'package:flutter/material.dart';
@@ -188,7 +189,8 @@ class _ManagedCalculatorPageState extends ConsumerState<ManagedCalculatorPage> {
   @override
   Widget build(BuildContext context) {
     final List<HistoryEntry> history = ref.watch(historyControllerProvider).valueOrNull ?? <HistoryEntry>[];
-    final FormulaIconOption iconOption = formulaIconByKey(widget.calculator.iconKey);
+    final List<FormulaIconOption> iconOptions = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+    final FormulaIconOption iconOption = formulaIconByKey(widget.calculator.iconKey, options: iconOptions);
 
     return Scaffold(
       appBar: AppBar(

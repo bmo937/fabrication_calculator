@@ -1,6 +1,7 @@
 import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/screens/managed_calculator_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,7 @@ class GroupPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final List<FormulaIconOption> iconOptions = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
     final List<ManagedCalculator> calculators = ref.watch(calculatorsByGroupProvider(groupId));
 
     if (calculators.isEmpty) {
@@ -35,7 +37,7 @@ class GroupPage extends ConsumerWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (BuildContext context, int index) {
         final ManagedCalculator calc = calculators[index];
-        final FormulaIconOption iconOption = formulaIconByKey(calc.iconKey);
+        final FormulaIconOption iconOption = formulaIconByKey(calc.iconKey, options: iconOptions);
         return Card(
           child: ListTile(
             contentPadding: const EdgeInsets.fromLTRB(14, 8, 10, 8),

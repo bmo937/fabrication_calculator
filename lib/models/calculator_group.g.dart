@@ -14,19 +14,21 @@ class CalculatorGroupAdapter extends TypeAdapter<CalculatorGroup> {
   CalculatorGroup read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read()};
-    return CalculatorGroup(id: fields[0] as String, name: fields[1] as String, sortOrder: (fields[2] as int?) ?? 0);
+    return CalculatorGroup(id: fields[0] as String, name: fields[1] as String, sortOrder: (fields[2] as int?) ?? 0, iconKey: (fields[3] as String?) ?? 'folder');
   }
 
   @override
   void write(BinaryWriter writer, CalculatorGroup obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.sortOrder);
+      ..write(obj.sortOrder)
+      ..writeByte(3)
+      ..write(obj.iconKey);
   }
 
   @override

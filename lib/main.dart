@@ -1,8 +1,10 @@
 import 'package:fabrication_calculator/models/calculator_group.dart';
+import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/history_entry.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
 import 'package:fabrication_calculator/providers/history_providers.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/providers/navigation_providers.dart';
 import 'package:fabrication_calculator/screens/group_page.dart';
 import 'package:fabrication_calculator/screens/manage_screen.dart';
@@ -92,7 +94,18 @@ class AppShell extends ConsumerWidget {
         final Widget body = _resolveBody(routeId, groups);
 
         return Scaffold(
-          appBar: AppBar(title: Text(appBarTitle)),
+          appBar: AppBar(
+            title: Row(
+              children: <Widget>[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset('assets/fabrication_calculator.png', width: 28, height: 28, fit: BoxFit.cover),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text(appBarTitle, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ),
           drawer: _AppDrawer(activeRouteId: routeId, groups: groups, builtIns: _builtIns),
           body: body,
         );
@@ -146,6 +159,8 @@ class _AppDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final List<FormulaIconOption> iconOptions = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+
     return Drawer(
       child: SafeArea(
         child: ListView(
@@ -164,11 +179,8 @@ class _AppDrawer extends ConsumerWidget {
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Text('Workshop\nHelper', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Center(child: Image.asset('assets/fabrication_calculator.png', fit: BoxFit.contain)),
                 ),
               ),
             ),
@@ -186,12 +198,15 @@ class _AppDrawer extends ConsumerWidget {
                 child: Text('Formulas', style: Theme.of(context).textTheme.labelSmall),
               ),
               for (final CalculatorGroup group in groups)
-                ListTile(
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(group.name),
-                  selected: activeRouteId == 'group:${group.id}',
-                  onTap: () => _navigate(context, ref, 'group:${group.id}'),
-                ),
+                () {
+                  final FormulaIconOption icon = formulaIconByKey(group.iconKey, options: iconOptions);
+                  return ListTile(
+                    leading: CircleAvatar(radius: 14, child: Text(icon.glyph, style: const TextStyle(fontSize: 13))),
+                    title: Text(group.name),
+                    selected: activeRouteId == 'group:${group.id}',
+                    onTap: () => _navigate(context, ref, 'group:${group.id}'),
+                  );
+                }(),
             ],
             // ── System ─────────────────────────────────────────────────
             const Divider(),

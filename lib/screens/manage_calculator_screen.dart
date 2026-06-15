@@ -3,7 +3,9 @@ import 'package:fabrication_calculator/models/calculator_group.dart';
 import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/services/calculator_code_sandbox.dart';
+import 'package:fabrication_calculator/widgets/icon_picker_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -30,6 +32,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
 
   late String? _selectedGroupId;
   late String _selectedIconKey;
+  List<FormulaIconOption> _iconOptions = formulaIconOptions;
   late bool _sandboxTestPassed;
   Map<String, double> _sandboxOutputs = <String, double>{};
   String? _testError;
@@ -404,14 +407,30 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
   }
 
   Widget _buildIconSection(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: _selectedIconKey,
-      decoration: const InputDecoration(labelText: 'Formula Icon', border: OutlineInputBorder()),
-      items: formulaIconOptions.map((FormulaIconOption option) => DropdownMenuItem<String>(value: option.key, child: Text('${option.glyph}  ${option.label}'))).toList(),
-      onChanged: (String? value) {
-        if (value == null) return;
+    final FormulaIconOption selected = formulaIconByKey(_selectedIconKey, options: _iconOptions);
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+      tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      leading: CircleAvatar(child: Text(selected.glyph)),
+      title: const Text('Formula Icon'),
+      subtitle: Text(selected.label),
+      trailing: const Icon(Icons.keyboard_arrow_up),
+      onTap: () async {
+        final IconPickerSelection? selection = await showIconPickerBottomSheet(
+          context,
+          title: 'Calculator Icon',
+          options: _iconOptions,
+          selectedKey: _selectedIconKey,
+          onAddCustomIcon: (String glyph, String label) {
+            return ref.read(iconCatalogProvider.notifier).addCustomIcon(glyph: glyph, label: label);
+          },
+        );
+        if (selection == null || !mounted) return;
         setState(() {
-          _selectedIconKey = value;
+          _iconOptions = selection.options;
+          _selectedIconKey = selection.selectedKey;
         });
       },
     );
@@ -442,6 +461,11 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
   @override
   Widget build(BuildContext context) {
     final List<CalculatorGroup> groups = ref.watch(calculatorGroupsProvider).valueOrNull ?? <CalculatorGroup>[];
+    final List<FormulaIconOption> catalog = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+
+    if (catalog.length != _iconOptions.length || catalog.any((FormulaIconOption option) => !_iconOptions.any((FormulaIconOption current) => current.key == option.key))) {
+      _iconOptions = catalog;
+    }
 
     if (_selectedGroupId == null && groups.isNotEmpty) {
       _selectedGroupId = groups.first.id;

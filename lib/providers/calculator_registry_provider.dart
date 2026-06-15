@@ -18,9 +18,9 @@ class CalculatorGroupsNotifier extends AsyncNotifier<List<CalculatorGroup>> {
   @override
   Future<List<CalculatorGroup>> build() async => _repo.getGroups();
 
-  Future<void> add(String name) async {
+  Future<void> add(String name, {String iconKey = 'folder'}) async {
     final List<CalculatorGroup> current = state.valueOrNull ?? <CalculatorGroup>[];
-    final CalculatorGroup group = CalculatorGroup(id: _uuid.v4(), name: name, sortOrder: current.length);
+    final CalculatorGroup group = CalculatorGroup(id: _uuid.v4(), name: name, sortOrder: current.length, iconKey: iconKey);
     await _repo.saveGroup(group);
     ref.invalidateSelf();
   }

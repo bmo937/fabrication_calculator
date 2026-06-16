@@ -113,25 +113,144 @@ dart run build_runner watch --delete-conflicting-outputs
 
 The automatic sandbox currently validates the **math** code language.
 
+Sandbox flow in the editor:
+
+1. Define input/output fields (each input has a required numeric test value).
+2. Write formula code in line-based assignments.
+3. Click **Run Test**.
+4. Fix any reported line-level error until status is **passed**.
+5. Publish only after a successful sandbox run.
+
+If inputs/outputs/code are changed, sandbox status is reset and must be re-run before publishing.
+
 Math formula format is line-based assignment:
 
 ```txt
-outputKey = expression;
+target = expression;
 ```
 
 Example:
+
+```txt
+spacing = length / (holes + 1);
+hole1 = round(spacing * 1);
+is_thick = thickness > 2;
+factor = if(is_thick, 1.25, 1.0);
+k = lookup(material_code, 1, 0.44, 2, 0.33, 0.40);
+result = hole1 * factor * k;
+```
+
+Supported expression features:
+
+- Arithmetic: `+`, `-`, `*`, `/`, `^`, parentheses
+- Comparisons: `>`, `<`, `>=`, `<=`, `==`, `!=`
+- Logic: `&&`, `||`, `!`
+- Built-in constants: `pi`, `e`
+- Built-in math functions from parser (for example `sqrt`, `sin`, `cos`, `pow`, `min`, `max`)
+- Sandbox custom functions:
+  - `if(condition, trueValue, falseValue)`
+  - `lookup(key, key1, value1, key2, value2, ..., defaultValue)`
+  - `lookup2d(rowKey, colKey, row1, col1, value1, row2, col2, value2, ..., defaultValue)`
+  - `round(value)`
+
+Behavior details:
+
+- Temporary variables are supported and can be reused across later lines.
+- Outputs can be assigned in any order, but each declared output key must be assigned by the end.
+- Booleans are numeric (`true = 1`, `false = 0`).
+- `if()`, `&&`, and `||` short-circuit (unused branches/operands are not evaluated).
+
+Validation and error rules:
+
+- Every output key must be assigned exactly once.
+- Input keys cannot be assigned.
+- Reserved constants (`pi`, `e`) cannot be assigned.
+- Unknown identifiers fail with an explicit error.
+- Unknown input keys in the test payload fail sandbox execution.
+- Non-finite results (for example divide-by-zero paths that evaluate) fail execution.
+- Syntax/format errors are reported with line numbers in the form `Line N: ...`.
+
+Publishing rule:
+
+- Drafts can be saved anytime.
+- Publishing a calculator requires sandbox status = passed.
+
+Current language support:
+
+- Automatic runtime sandbox is available only for `math` code language.
+- Other languages are currently authoring-only and require manual verification.
+
+Simple area/perimeter example:
 
 ```txt
 area = width * height;
 perimeter = 2 * (width + height);
 ```
 
-Rules:
+### Formula Patterns (Recipes)
 
-- Every output key must be assigned exactly once
-- Input and output keys must be valid identifiers (letters, numbers, underscore)
-- Use defined input/output keys only
-- Constants like `pi` and `e` are available in math expressions
+Use these as starting templates when building custom calculators.
+
+Running totals:
+
+```txt
+t1 = value1;
+t2 = t1 + value2;
+t3 = t2 + value3;
+t4 = t3 + value4;
+```
+
+Even spacing / repeated offsets:
+
+```txt
+spacing = length / (holes + 1);
+hole1 = round(spacing * 1);
+hole2 = round(spacing * 2);
+hole3 = round(spacing * 3);
+```
+
+Threshold-based factor with `if()`:
+
+```txt
+area = width * height;
+is_thick = thickness > 2;
+factor = if(is_thick, 1.25, 1.0);
+result = area * factor;
+```
+
+Single-key lookup table (`lookup`):
+
+```txt
+k = lookup(material_code, 1, 0.44, 2, 0.33, 3, 0.28, 0.40);
+result = base * k;
+```
+
+Two-key lookup table (`lookup2d`):
+
+```txt
+rate = lookup2d(size_code, grade_code,
+  1, 1, 10,
+  1, 2, 12,
+  2, 1, 14,
+  2, 2, 16,
+  9);
+result = qty * rate;
+```
+
+### Sandbox Troubleshooting
+
+| Error (example) | Likely cause | Fix |
+|---|---|---|
+| `Line 3: Use "outputKey = expression;" format.` | Line is not a valid assignment. | Use exactly one assignment per non-comment line, like `target = expression;`. |
+| `Line N: "length" is an input key and cannot be assigned.` | Formula tries to overwrite an input field key. | Write to a temp variable or output key instead. |
+| `Line N: "result" output is already assigned.` | Same output key assigned more than once. | Keep one final assignment per output key. |
+| `Missing assignments for: result.` | At least one declared output key was never assigned. | Add assignment lines for every output key. |
+| `Unknown identifier "foo".` | Typo or missing input/temp/output variable. | Correct spelling or define it on an earlier line. |
+| `Invalid test value for "width".` | Test input is blank or non-numeric. | Enter a numeric value for every input test field. |
+| `Expression result is not finite.` | Runtime path produced `NaN`/infinity (for example divide-by-zero). | Add guards with `if()` and safe defaults. |
+| `lookup() requires key/value pairs and a final default value.` | Wrong argument count/order for `lookup`. | Use `lookup(key, key1, value1, key2, value2, ..., defaultValue)`. |
+| `lookup2d() requires row/col/value tuples and a final default value.` | Wrong argument structure for `lookup2d`. | Use `lookup2d(rowKey, colKey, row1, col1, value1, ..., defaultValue)`. |
+| `Automatic sandbox is unavailable for <language>. Use manual verification.` | Code language is not `math`. | Keep calculator in `math` for auto sandbox, or verify manually. |
 
 ## Data Storage
 

@@ -18,15 +18,21 @@ class CalculatorGroupsNotifier extends AsyncNotifier<List<CalculatorGroup>> {
   @override
   Future<List<CalculatorGroup>> build() async => _repo.getGroups();
 
-  Future<void> add(String name) async {
+  Future<void> add(String name, {String iconKey = 'folder'}) async {
     final List<CalculatorGroup> current = state.valueOrNull ?? <CalculatorGroup>[];
-    final CalculatorGroup group = CalculatorGroup(id: _uuid.v4(), name: name, sortOrder: current.length);
+    final CalculatorGroup group = CalculatorGroup(id: _uuid.v4(), name: name, sortOrder: current.length, iconKey: iconKey);
     await _repo.saveGroup(group);
     ref.invalidateSelf();
   }
 
   Future<void> updateGroup(CalculatorGroup group) async {
     await _repo.saveGroup(group);
+    ref.invalidateSelf();
+  }
+
+  Future<void> reorderGroups(List<CalculatorGroup> reordered) async {
+    final List<CalculatorGroup> normalized = <CalculatorGroup>[for (int i = 0; i < reordered.length; i++) reordered[i].copyWith(sortOrder: i)];
+    await _repo.updateGroupSortOrders(normalized);
     ref.invalidateSelf();
   }
 
@@ -60,6 +66,23 @@ class ManagedCalculatorsNotifier extends AsyncNotifier<List<ManagedCalculator>> 
 
   Future<void> updateCalculator(ManagedCalculator calculator) async {
     await _repo.saveCalculator(calculator);
+    ref.invalidateSelf();
+  }
+
+  Future<void> reorderPublishedInGroup(String groupId, List<ManagedCalculator> reorderedPublished) async {
+    final List<ManagedCalculator> current = state.valueOrNull ?? <ManagedCalculator>[];
+    final List<ManagedCalculator> draftsInGroup = current.where((ManagedCalculator c) => c.groupId == groupId && c.isDraft).toList()
+      ..sort((ManagedCalculator a, ManagedCalculator b) => a.sortOrder.compareTo(b.sortOrder));
+
+    final List<ManagedCalculator> normalized = <ManagedCalculator>[];
+    for (int i = 0; i < reorderedPublished.length; i++) {
+      normalized.add(reorderedPublished[i].copyWith(sortOrder: i));
+    }
+    for (int i = 0; i < draftsInGroup.length; i++) {
+      normalized.add(draftsInGroup[i].copyWith(sortOrder: reorderedPublished.length + i));
+    }
+
+    await _repo.updateCalculatorSortOrders(normalized);
     ref.invalidateSelf();
   }
 

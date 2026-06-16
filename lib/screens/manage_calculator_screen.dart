@@ -3,12 +3,15 @@ import 'package:fabrication_calculator/models/calculator_group.dart';
 import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/services/calculator_code_sandbox.dart';
+import 'package:fabrication_calculator/widgets/icon_picker_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 const Uuid _uuid = Uuid();
+const String _dslCodeLanguage = 'math';
 
 class ManageCalculatorScreen extends ConsumerStatefulWidget {
   const ManageCalculatorScreen({this.calculator, this.initialGroupId, super.key});
@@ -28,8 +31,8 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
   late final TextEditingController _codeController;
 
   late String? _selectedGroupId;
-  late String _selectedCodeLanguage;
   late String _selectedIconKey;
+  List<FormulaIconOption> _iconOptions = formulaIconOptions;
   late bool _sandboxTestPassed;
   Map<String, double> _sandboxOutputs = <String, double>{};
   String? _testError;
@@ -47,7 +50,6 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
     _codeController = TextEditingController();
 
     _selectedGroupId = calc?.groupId ?? widget.initialGroupId;
-    _selectedCodeLanguage = calc?.codeLanguage ?? 'math';
     _selectedIconKey = calc?.iconKey ?? 'function';
     _sandboxTestPassed = calc?.sandboxTestPassed ?? false;
     _testError = (calc?.sandboxLastError ?? '').isEmpty ? null : calc!.sandboxLastError;
@@ -101,37 +103,12 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       final String target = outputs.first.key;
       return '$target = ${calc.formulaExpression!.trim()};';
     }
-    return _templateCodeFromOutputs(outputs, codeLanguage: _selectedCodeLanguage);
+    return _templateCodeFromOutputs(outputs);
   }
 
-  String _templateCodeFromOutputs(List<CalculatorFieldDefinition> outputs, {String? codeLanguage}) {
-    final String selectedLanguage = codeLanguage ?? _selectedCodeLanguage;
-
+  String _templateCodeFromOutputs(List<CalculatorFieldDefinition> outputs) {
     if (outputs.isEmpty) {
       return '// Define output assignments, e.g.\n// result = x * 2;';
-    }
-
-    if (selectedLanguage == 'python') {
-      return 'def run_calculator(inputs):\n'
-          '    return {\n'
-          '${outputs.map((CalculatorFieldDefinition o) => '        "${o.key}": 0,').join('\n')}\n'
-          '    }';
-    }
-
-    if (selectedLanguage == 'julia') {
-      return 'function run_calculator(inputs)\n'
-          '    return Dict(\n'
-          '${outputs.map((CalculatorFieldDefinition o) => '        :${o.key} => 0,').join('\n')}\n'
-          '    )\n'
-          'end';
-    }
-
-    if (selectedLanguage == 'dart') {
-      return 'Map<String, dynamic> runCalculator(Map<String, double> input) {\n'
-          '  return <String, dynamic>{\n'
-          '${outputs.map((CalculatorFieldDefinition o) => '    \'${o.key}\': 0,').join('\n')}\n'
-          '  };\n'
-          '}';
     }
 
     return outputs.map((CalculatorFieldDefinition o) => '${o.key} = 0;').join('\n');
@@ -195,7 +172,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       inputDefinitionsJson: CalculatorFieldDefinition.listToJson(inputs),
       outputDefinitionsJson: CalculatorFieldDefinition.listToJson(outputs),
       sandboxLastError: _testError ?? '',
-      codeLanguage: _selectedCodeLanguage,
+      codeLanguage: _dslCodeLanguage,
       iconKey: _selectedIconKey,
     );
 
@@ -286,15 +263,6 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       return;
     }
 
-    if (!CalculatorCodeSandbox.supportsAutomaticSandbox(_selectedCodeLanguage)) {
-      setState(() {
-        _sandboxOutputs = <String, double>{};
-        _sandboxTestPassed = false;
-        _testError = 'Automatic sandbox is unavailable for ${_codeLanguageLabel(_selectedCodeLanguage)}. Use manual verification.';
-      });
-      return;
-    }
-
     final List<CalculatorFieldDefinition> inputs = _collectInputs();
     final List<CalculatorFieldDefinition> outputs = _collectOutputs();
     final Map<String, double> testInputs = <String, double>{};
@@ -319,7 +287,7 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       inputs: inputs,
       outputs: outputs,
       inputValues: testInputs,
-      codeLanguage: _selectedCodeLanguage,
+      codeLanguage: _dslCodeLanguage,
     );
 
     if (!result.success) {
@@ -372,19 +340,6 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
     });
   }
 
-  String _codeLanguageLabel(String codeLanguage) {
-    switch (codeLanguage) {
-      case 'python':
-        return 'Python';
-      case 'julia':
-        return 'Julia';
-      case 'dart':
-        return 'Dart';
-      default:
-        return 'Math Sandbox';
-    }
-  }
-
   void _insertAtCursor(String insertion) {
     final TextSelection selection = _codeController.selection;
     final String text = _codeController.text;
@@ -420,11 +375,30 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
       chips.add(ActionChip(label: Text('out:$key='), onPressed: () => _insertAtCursor('$key = ')));
     }
 
+    const List<MapEntry<String, String>> syntaxChips = <MapEntry<String, String>>[
+      MapEntry<String, String>('if()', 'if(condition, trueValue, falseValue)'),
+      MapEntry<String, String>('lookup()', 'lookup(key, key1, value1, defaultValue)'),
+      MapEntry<String, String>('lookup2d()', 'lookup2d(rowKey, colKey, row1, col1, value1, defaultValue)'),
+      MapEntry<String, String>('&&', ' && '),
+      MapEntry<String, String>('||', ' || '),
+      MapEntry<String, String>('!', '!'),
+      MapEntry<String, String>('==', ' == '),
+      MapEntry<String, String>('!=', ' != '),
+      MapEntry<String, String>('>=', ' >= '),
+      MapEntry<String, String>('<=', ' <= '),
+      MapEntry<String, String>('>', ' > '),
+      MapEntry<String, String>('<', ' < '),
+    ];
+
+    for (final MapEntry<String, String> syntaxChip in syntaxChips) {
+      chips.add(ActionChip(label: Text(syntaxChip.key), onPressed: () => _insertAtCursor(syntaxChip.value)));
+    }
+
     chips.add(
       ActionChip(
         label: const Text('Template'),
         onPressed: () {
-          _codeController.text = _templateCodeFromOutputs(_collectOutputs(), codeLanguage: _selectedCodeLanguage);
+          _codeController.text = _templateCodeFromOutputs(_collectOutputs());
         },
       ),
     );
@@ -432,57 +406,34 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
     return chips;
   }
 
-  Widget _buildLanguageSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('Code Language', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[_languageChip('math', 'Math Sandbox'), _languageChip('dart', 'Dart'), _languageChip('python', 'Python'), _languageChip('julia', 'Julia')],
-        ),
-      ],
-    );
-  }
-
   Widget _buildIconSection(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: _selectedIconKey,
-      decoration: const InputDecoration(labelText: 'Formula Icon', border: OutlineInputBorder()),
-      items: formulaIconOptions.map((FormulaIconOption option) => DropdownMenuItem<String>(value: option.key, child: Text('${option.glyph}  ${option.label}'))).toList(),
-      onChanged: (String? value) {
-        if (value == null) return;
+    final FormulaIconOption selected = formulaIconByKey(_selectedIconKey, options: _iconOptions);
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+      tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      leading: CircleAvatar(child: Text(selected.glyph)),
+      title: const Text('Formula Icon'),
+      subtitle: Text(selected.label),
+      trailing: const Icon(Icons.keyboard_arrow_up),
+      onTap: () async {
+        final IconPickerSelection? selection = await showIconPickerBottomSheet(
+          context,
+          title: 'Calculator Icon',
+          options: _iconOptions,
+          selectedKey: _selectedIconKey,
+          onAddCustomIcon: (String glyph, String label) {
+            return ref.read(iconCatalogProvider.notifier).addCustomIcon(glyph: glyph, label: label);
+          },
+        );
+        if (selection == null || !mounted) return;
         setState(() {
-          _selectedIconKey = value;
+          _iconOptions = selection.options;
+          _selectedIconKey = selection.selectedKey;
         });
       },
     );
-  }
-
-  Widget _languageChip(String code, String label) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: _selectedCodeLanguage == code,
-      onSelected: (bool selected) {
-        if (!selected || _selectedCodeLanguage == code) return;
-        setState(() {
-          _selectedCodeLanguage = code;
-          _sandboxTestPassed = false;
-          _sandboxOutputs = <String, double>{};
-          _testError = null;
-        });
-      },
-    );
-  }
-
-  void _markManualVerificationPassed() {
-    setState(() {
-      _sandboxTestPassed = true;
-      _sandboxOutputs = <String, double>{};
-      _testError = null;
-    });
   }
 
   void _removeInputRow(int index) {
@@ -510,6 +461,11 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
   @override
   Widget build(BuildContext context) {
     final List<CalculatorGroup> groups = ref.watch(calculatorGroupsProvider).valueOrNull ?? <CalculatorGroup>[];
+    final List<FormulaIconOption> catalog = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+
+    if (catalog.length != _iconOptions.length || catalog.any((FormulaIconOption option) => !_iconOptions.any((FormulaIconOption current) => current.key == option.key))) {
+      _iconOptions = catalog;
+    }
 
     if (_selectedGroupId == null && groups.isNotEmpty) {
       _selectedGroupId = groups.first.id;
@@ -562,7 +518,16 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
                 validator: (String? v) => v == null ? 'Select a group' : null,
               ),
             const SizedBox(height: 16),
-            _buildLanguageSection(context),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Formula DSL only. Use one assignment per line: target = expression;\n'
+                  'Targets may be temp variables or output keys. Every output key must be assigned by the end.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
             _buildDefinitionsSection(context, title: 'Input Fields', rows: _inputRows, onAdd: _addInputRow, onRemove: _removeInputRow, includeTestValue: true),
             const SizedBox(height: 16),
@@ -658,19 +623,27 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
           },
         ),
         const SizedBox(height: 6),
-        Text(
-          _selectedCodeLanguage == 'math'
-              ? 'One assignment per line, e.g. area = length * width; each output key must be assigned once.'
-              : 'Python/Dart/Julia authoring is supported in this editor. Use helper chips to insert keys quickly.',
-          style: Theme.of(context).textTheme.bodySmall,
+        Text('Supports + - * / ^, comparisons, && || !, if(), lookup(), lookup2d(). Booleans are numeric (true=1, false=0).', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text(
+              'Examples:\n'
+              'spacing = length / (holes + 1);\n'
+              'hole1 = round(spacing * 1);\n'
+              'is_thick = thickness > 2;\n'
+              'factor = if(is_thick, 1.25, 1.0);\n'
+              'k = lookup(material_code, 1, 0.44, 2, 0.33, 0.40);',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildSandboxSection(BuildContext context) {
-    final bool autoSandbox = CalculatorCodeSandbox.supportsAutomaticSandbox(_selectedCodeLanguage);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -678,20 +651,9 @@ class _ManageCalculatorScreenState extends ConsumerState<ManageCalculatorScreen>
           children: <Widget>[
             Text('Sandbox Test', style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
-            if (autoSandbox)
-              ElevatedButton(onPressed: _runSandbox, child: const Text('Run Test'))
-            else
-              ElevatedButton(onPressed: _markManualVerificationPassed, child: const Text('Mark Test Passed (Manual)')),
+            ElevatedButton(onPressed: _runSandbox, child: const Text('Run Test')),
           ],
         ),
-        if (!autoSandbox)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Automatic sandbox is unavailable for ${_codeLanguageLabel(_selectedCodeLanguage)}. Review code manually, then mark test passed.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
         const SizedBox(height: 8),
         Text(
           _sandboxTestPassed ? 'Status: passed' : 'Status: not passed',

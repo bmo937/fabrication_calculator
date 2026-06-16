@@ -1,6 +1,7 @@
 import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/screens/managed_calculator_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,7 @@ class GroupPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final List<FormulaIconOption> iconOptions = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
     final List<ManagedCalculator> calculators = ref.watch(calculatorsByGroupProvider(groupId));
 
     if (calculators.isEmpty) {
@@ -30,15 +32,21 @@ class GroupPage extends ConsumerWidget {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
       itemCount: calculators.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (BuildContext context, int index) {
         final ManagedCalculator calc = calculators[index];
-        final FormulaIconOption iconOption = formulaIconByKey(calc.iconKey);
+        final FormulaIconOption iconOption = formulaIconByKey(calc.iconKey, options: iconOptions);
         return Card(
           child: ListTile(
-            leading: CircleAvatar(radius: 14, child: Text(iconOption.glyph, style: const TextStyle(fontSize: 14))),
+            contentPadding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+            leading: CircleAvatar(
+              radius: 18,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+              child: Text(iconOption.glyph, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
             title: Text(calc.name),
             subtitle: calc.description.isNotEmpty ? Text(calc.description, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),

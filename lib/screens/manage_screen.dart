@@ -2,7 +2,9 @@ import 'package:fabrication_calculator/models/calculator_group.dart';
 import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/screens/manage_calculator_screen.dart';
+import 'package:fabrication_calculator/widgets/icon_picker_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,22 +14,41 @@ class ManageScreen extends ConsumerWidget {
   // ── Group dialogs ──────────────────────────────────────────────────────────
 
   static Future<void> _showAddGroupDialog(BuildContext context, WidgetRef ref) async {
-    final String? name = await showDialog<String>(
+    final List<FormulaIconOption> iconOptions = ref.read(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+    final _GroupDraft? draft = await showDialog<_GroupDraft>(
       context: context,
-      builder: (BuildContext ctx) => const _GroupNameDialog(title: 'New Group', confirmLabel: 'Add'),
+      builder: (BuildContext ctx) => _GroupNameDialog(
+        title: 'New Group',
+        confirmLabel: 'Add',
+        initialIconKey: 'folder',
+        iconOptions: iconOptions,
+        onAddCustomIcon: ({required String glyph, required String label}) {
+          return ref.read(iconCatalogProvider.notifier).addCustomIcon(glyph: glyph, label: label);
+        },
+      ),
     );
-    if (name != null && name.isNotEmpty) {
-      await ref.read(calculatorGroupsProvider.notifier).add(name);
+    if (draft != null && draft.name.isNotEmpty) {
+      await ref.read(calculatorGroupsProvider.notifier).add(draft.name, iconKey: draft.iconKey);
     }
   }
 
   static Future<void> _showEditGroupDialog(BuildContext context, WidgetRef ref, CalculatorGroup group) async {
-    final String? name = await showDialog<String>(
+    final List<FormulaIconOption> iconOptions = ref.read(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+    final _GroupDraft? draft = await showDialog<_GroupDraft>(
       context: context,
-      builder: (BuildContext ctx) => _GroupNameDialog(title: 'Rename Group', confirmLabel: 'Save', initialValue: group.name),
+      builder: (BuildContext ctx) => _GroupNameDialog(
+        title: 'Edit Group',
+        confirmLabel: 'Save',
+        initialValue: group.name,
+        initialIconKey: group.iconKey,
+        iconOptions: iconOptions,
+        onAddCustomIcon: ({required String glyph, required String label}) {
+          return ref.read(iconCatalogProvider.notifier).addCustomIcon(glyph: glyph, label: label);
+        },
+      ),
     );
-    if (name != null && name.isNotEmpty && name != group.name) {
-      await ref.read(calculatorGroupsProvider.notifier).updateGroup(group.copyWith(name: name));
+    if (draft != null && draft.name.isNotEmpty && (draft.name != group.name || draft.iconKey != group.iconKey)) {
+      await ref.read(calculatorGroupsProvider.notifier).updateGroup(group.copyWith(name: draft.name, iconKey: draft.iconKey));
     }
   }
 
@@ -86,11 +107,19 @@ class ManageScreen extends ConsumerWidget {
     );
   }
 
+  static List<T> _moveItem<T>(List<T> items, int oldIndex, int newIndex) {
+    final List<T> updated = List<T>.of(items);
+    final T moved = updated.removeAt(oldIndex);
+    updated.insert(newIndex, moved);
+    return updated;
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<CalculatorGroup>> groupsAsync = ref.watch(calculatorGroupsProvider);
+    final List<FormulaIconOption> iconOptions = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
     final List<ManagedCalculator> allCalcs = ref.watch(managedCalculatorsProvider).valueOrNull ?? <ManagedCalculator>[];
     final List<ManagedCalculator> allDrafts = allCalcs.where((ManagedCalculator c) => c.isDraft).toList()
       ..sort((ManagedCalculator a, ManagedCalculator b) => b.sortOrder.compareTo(a.sortOrder));
@@ -115,83 +144,146 @@ class ManageScreen extends ConsumerWidget {
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
-            children: <Widget>[
-              if (allDrafts.isNotEmpty)
-                Card(
-                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          child: Text('Drafts', style: Theme.of(context).textTheme.titleSmall),
-                        ),
-                        for (final ManagedCalculator draft in allDrafts)
-                          _DraftTile(
-                            calculator: draft,
-                            groupName: groups.where((CalculatorGroup g) => g.id == draft.groupId).map((CalculatorGroup g) => g.name).firstOrNull ?? 'Unknown Group',
-                            onEdit: () => _openCalculatorEditor(context, calculator: draft),
-                            onDuplicate: () => ref.read(managedCalculatorsProvider.notifier).duplicate(draft.id),
-                            onDelete: () => _confirmDeleteCalculator(context, ref, draft),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              for (final CalculatorGroup group in groups)
-                () {
-                  final List<ManagedCalculator> groupCalcs = allCalcs.where((ManagedCalculator c) => c.groupId == group.id).toList()
-                    ..sort((ManagedCalculator a, ManagedCalculator b) => a.sortOrder.compareTo(b.sortOrder));
-                  final List<ManagedCalculator> publishedCalcs = groupCalcs.where((ManagedCalculator c) => !c.isDraft).toList();
-                  final int publishedCount = publishedCalcs.length;
-                  final int draftCount = groupCalcs.length - publishedCount;
+          final List<CalculatorGroup> orderedGroups = List<CalculatorGroup>.of(groups)..sort((CalculatorGroup a, CalculatorGroup b) => a.sortOrder.compareTo(b.sortOrder));
 
-                  return Card(
+          final Widget header = Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('Organize Formulas', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 6),
+                    Text('Drag groups to reorder sections and drag formulas within a group to control calculator order.', style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+          return ReorderableListView.builder(
+            buildDefaultDragHandles: false,
+            header: Column(
+              children: <Widget>[
+                header,
+                if (allDrafts.isNotEmpty)
+                  Card(
                     margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                      title: Text(group.name, style: Theme.of(context).textTheme.titleMedium),
-                      subtitle: Text('$publishedCount published • $draftCount draft'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          IconButton(tooltip: 'Rename', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showEditGroupDialog(context, ref, group)),
-                          IconButton(
-                            tooltip: 'Delete',
-                            icon: const Icon(Icons.delete_outline, size: 20),
-                            onPressed: () => _confirmDeleteGroup(context, ref, group, groupCalcs.length),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+                            child: Text('Draft Queue', style: Theme.of(context).textTheme.titleSmall),
                           ),
-                          const Icon(Icons.expand_more),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                            child: Text('Draft formulas stay here until published.', style: Theme.of(context).textTheme.bodySmall),
+                          ),
+                          for (final ManagedCalculator draft in allDrafts)
+                            _DraftTile(
+                              calculator: draft,
+                              iconOptions: iconOptions,
+                              groupName: groups.where((CalculatorGroup g) => g.id == draft.groupId).map((CalculatorGroup g) => g.name).firstOrNull ?? 'Unknown Group',
+                              onEdit: () => _openCalculatorEditor(context, calculator: draft),
+                              onDuplicate: () => ref.read(managedCalculatorsProvider.notifier).duplicate(draft.id),
+                              onDelete: () => _confirmDeleteCalculator(context, ref, draft),
+                            ),
                         ],
                       ),
-                      children: <Widget>[
-                        if (publishedCalcs.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                            child: Text('No published calculators in this group.', style: Theme.of(context).textTheme.bodySmall),
-                          ),
-                        for (final ManagedCalculator calc in publishedCalcs)
-                          _CalculatorTile(
+                    ),
+                  ),
+              ],
+            ),
+            padding: const EdgeInsets.only(bottom: 88),
+            itemCount: orderedGroups.length,
+            onReorderItem: (int oldIndex, int newIndex) {
+              final List<CalculatorGroup> reordered = _moveItem<CalculatorGroup>(orderedGroups, oldIndex, newIndex);
+              ref.read(calculatorGroupsProvider.notifier).reorderGroups(reordered);
+            },
+            itemBuilder: (BuildContext context, int index) {
+              final CalculatorGroup group = orderedGroups[index];
+              final List<ManagedCalculator> groupCalcs = allCalcs.where((ManagedCalculator c) => c.groupId == group.id).toList()
+                ..sort((ManagedCalculator a, ManagedCalculator b) => a.sortOrder.compareTo(b.sortOrder));
+              final List<ManagedCalculator> publishedCalcs = groupCalcs.where((ManagedCalculator c) => !c.isDraft).toList();
+              final int publishedCount = publishedCalcs.length;
+              final int draftCount = groupCalcs.length - publishedCount;
+              final FormulaIconOption groupIcon = formulaIconByKey(group.iconKey, options: iconOptions);
+
+              return Card(
+                key: ValueKey<String>('group-${group.id}'),
+                margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                child: ExpansionTile(
+                  maintainState: true,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: CircleAvatar(radius: 16, child: Text(groupIcon.glyph, style: const TextStyle(fontSize: 14))),
+                  title: Text(group.name, style: Theme.of(context).textTheme.titleMedium),
+                  subtitle: Text('$publishedCount published • $draftCount draft'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      IconButton(tooltip: 'Rename', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showEditGroupDialog(context, ref, group)),
+                      IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => _confirmDeleteGroup(context, ref, group, groupCalcs.length)),
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.drag_indicator)),
+                      ),
+                    ],
+                  ),
+                  children: <Widget>[
+                    if (publishedCalcs.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: Text('No published calculators in this group.', style: Theme.of(context).textTheme.bodySmall),
+                      )
+                    else
+                      ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: publishedCalcs.length,
+                        onReorderItem: (int oldIndex, int newIndex) {
+                          final List<ManagedCalculator> reordered = _moveItem<ManagedCalculator>(publishedCalcs, oldIndex, newIndex);
+                          ref.read(managedCalculatorsProvider.notifier).reorderPublishedInGroup(group.id, reordered);
+                        },
+                        itemBuilder: (BuildContext context, int calcIndex) {
+                          final ManagedCalculator calc = publishedCalcs[calcIndex];
+                          return _CalculatorTile(
+                            key: ValueKey<String>('calc-${calc.id}'),
                             calculator: calc,
+                            iconOptions: iconOptions,
+                            dragHandle: ReorderableDragStartListener(
+                              index: calcIndex,
+                              child: const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.drag_indicator)),
+                            ),
                             onEdit: () => _openCalculatorEditor(context, calculator: calc),
                             onDuplicate: () => ref.read(managedCalculatorsProvider.notifier).duplicate(calc.id),
                             onDelete: () => _confirmDeleteCalculator(context, ref, calc),
-                          ),
-                        ListTile(
-                          dense: true,
-                          leading: Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
-                          title: Text('Add Formula', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                          onTap: () => _openCalculatorEditor(context, initialGroupId: group.id),
-                        ),
-                      ],
+                          );
+                        },
+                      ),
+                    ListTile(
+                      dense: true,
+                      leading: Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
+                      title: Text('Add Formula', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                      onTap: () => _openCalculatorEditor(context, initialGroupId: group.id),
                     ),
-                  );
-                }(),
-            ],
+                  ],
+                ),
+              );
+            },
           );
         },
       ),
@@ -205,11 +297,21 @@ class ManageScreen extends ConsumerWidget {
 }
 
 class _GroupNameDialog extends StatefulWidget {
-  const _GroupNameDialog({required this.title, required this.confirmLabel, this.initialValue = ''});
+  const _GroupNameDialog({
+    required this.title,
+    required this.confirmLabel,
+    required this.initialIconKey,
+    required this.iconOptions,
+    required this.onAddCustomIcon,
+    this.initialValue = '',
+  });
 
   final String title;
   final String confirmLabel;
   final String initialValue;
+  final String initialIconKey;
+  final List<FormulaIconOption> iconOptions;
+  final Future<FormulaIconOption> Function({required String glyph, required String label}) onAddCustomIcon;
 
   @override
   State<_GroupNameDialog> createState() => _GroupNameDialogState();
@@ -217,11 +319,31 @@ class _GroupNameDialog extends StatefulWidget {
 
 class _GroupNameDialogState extends State<_GroupNameDialog> {
   late final TextEditingController _controller;
+  late String _selectedIconKey;
+  late List<FormulaIconOption> _iconOptions;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialValue);
+    _selectedIconKey = widget.initialIconKey;
+    _iconOptions = widget.iconOptions;
+  }
+
+  Future<void> _pickIcon() async {
+    final IconPickerSelection? selection = await showIconPickerBottomSheet(
+      context,
+      title: 'Group Icon',
+      options: _iconOptions,
+      selectedKey: _selectedIconKey,
+      onAddCustomIcon: (String glyph, String label) => widget.onAddCustomIcon(glyph: glyph, label: label),
+    );
+    if (selection != null && mounted) {
+      setState(() {
+        _iconOptions = selection.options;
+        _selectedIconKey = selection.selectedKey;
+      });
+    }
   }
 
   @override
@@ -232,28 +354,55 @@ class _GroupNameDialogState extends State<_GroupNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final FormulaIconOption selectedIcon = formulaIconByKey(_selectedIconKey, options: _iconOptions);
+
     return AlertDialog(
       title: Text(widget.title),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'Group Name', border: OutlineInputBorder()),
-        onSubmitted: (String value) => Navigator.of(context).pop(value.trim()),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Group Name', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(child: Text(selectedIcon.glyph)),
+            title: const Text('Group Icon'),
+            subtitle: Text(selectedIcon.label),
+            trailing: const Icon(Icons.keyboard_arrow_up),
+            onTap: _pickIcon,
+          ),
+        ],
       ),
       actions: <Widget>[
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        TextButton(onPressed: () => Navigator.of(context).pop(_controller.text.trim()), child: Text(widget.confirmLabel)),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_GroupDraft(name: _controller.text.trim(), iconKey: _selectedIconKey)),
+          child: Text(widget.confirmLabel),
+        ),
       ],
     );
   }
 }
 
+class _GroupDraft {
+  const _GroupDraft({required this.name, required this.iconKey});
+
+  final String name;
+  final String iconKey;
+}
+
 // ── Calculator tile ────────────────────────────────────────────────────────────
 
 class _CalculatorTile extends StatelessWidget {
-  const _CalculatorTile({required this.calculator, required this.onEdit, required this.onDuplicate, required this.onDelete});
+  const _CalculatorTile({super.key, required this.calculator, required this.iconOptions, this.dragHandle, required this.onEdit, required this.onDuplicate, required this.onDelete});
 
   final ManagedCalculator calculator;
+  final List<FormulaIconOption> iconOptions;
+  final Widget? dragHandle;
   final VoidCallback onEdit;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
@@ -263,7 +412,7 @@ class _CalculatorTile extends StatelessWidget {
     final String status = calculator.isDraft ? 'Draft' : 'Published';
     final Color statusColor = calculator.isDraft ? Theme.of(context).colorScheme.tertiary : Theme.of(context).colorScheme.primary;
     final String? metadata = !calculator.isDraft ? _formatPublishedMetadata(calculator) : null;
-    final FormulaIconOption iconOption = formulaIconByKey(calculator.iconKey);
+    final FormulaIconOption iconOption = formulaIconByKey(calculator.iconKey, options: iconOptions);
 
     return ListTile(
       dense: true,
@@ -308,6 +457,7 @@ class _CalculatorTile extends StatelessWidget {
               onDelete();
           }
         },
+        child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[const Icon(Icons.more_vert), ?dragHandle]),
       ),
     );
   }
@@ -329,9 +479,10 @@ class _CalculatorTile extends StatelessWidget {
 }
 
 class _DraftTile extends StatelessWidget {
-  const _DraftTile({required this.calculator, required this.groupName, required this.onEdit, required this.onDuplicate, required this.onDelete});
+  const _DraftTile({required this.calculator, required this.iconOptions, required this.groupName, required this.onEdit, required this.onDuplicate, required this.onDelete});
 
   final ManagedCalculator calculator;
+  final List<FormulaIconOption> iconOptions;
   final String groupName;
   final VoidCallback onEdit;
   final VoidCallback onDuplicate;
@@ -341,7 +492,7 @@ class _DraftTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final String sandboxStatus = calculator.sandboxTestPassed ? 'Sandbox passed' : 'Sandbox not passed';
     final String? lastTest = calculator.lastSandboxTestAt == null ? null : _CalculatorTile._formatDate(calculator.lastSandboxTestAt!);
-    final FormulaIconOption iconOption = formulaIconByKey(calculator.iconKey);
+    final FormulaIconOption iconOption = formulaIconByKey(calculator.iconKey, options: iconOptions);
 
     return ListTile(
       dense: true,

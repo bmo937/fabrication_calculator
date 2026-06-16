@@ -1,13 +1,16 @@
 import 'package:fabrication_calculator/models/calculator_group.dart';
+import 'package:fabrication_calculator/models/formula_icon_option.dart';
 import 'package:fabrication_calculator/models/history_entry.dart';
 import 'package:fabrication_calculator/models/managed_calculator.dart';
 import 'package:fabrication_calculator/providers/calculator_registry_provider.dart';
 import 'package:fabrication_calculator/providers/history_providers.dart';
+import 'package:fabrication_calculator/providers/icon_catalog_provider.dart';
 import 'package:fabrication_calculator/providers/navigation_providers.dart';
 import 'package:fabrication_calculator/screens/group_page.dart';
 import 'package:fabrication_calculator/screens/manage_screen.dart';
 import 'package:fabrication_calculator/screens/settings_screen.dart';
 import 'package:fabrication_calculator/screens/traditional_calculator_screen.dart';
+import 'package:fabrication_calculator/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -43,8 +46,8 @@ class _AppRoot extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Workshop Helper',
-      theme: ThemeData(colorSchemeSeed: Colors.blueGrey, useMaterial3: true),
-      darkTheme: ThemeData(colorSchemeSeed: Colors.blueGrey, useMaterial3: true, brightness: Brightness.dark),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       builder: (BuildContext context, Widget? child) {
         if (child == null) return const SizedBox.shrink();
@@ -145,16 +148,32 @@ class _AppDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final List<FormulaIconOption> iconOptions = ref.watch(iconCatalogProvider).valueOrNull ?? formulaIconOptions;
+
     return Drawer(
       child: SafeArea(
         child: ListView(
           padding: EdgeInsets.zero,
           children: <Widget>[
             // ── Header ─────────────────────────────────────────────────
-            const DrawerHeader(
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: Text('Workshop\nHelper', style: TextStyle(fontSize: 18)),
+            SizedBox(
+              height: 320,
+              child: DrawerHeader(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.surface],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                    child: Center(child: Image.asset('assets/fabrication_calculator.png', width: 300, fit: BoxFit.contain)),
+                  ),
+                ),
               ),
             ),
             // ── Built-in calculators ───────────────────────────────────
@@ -171,12 +190,15 @@ class _AppDrawer extends ConsumerWidget {
                 child: Text('Formulas', style: Theme.of(context).textTheme.labelSmall),
               ),
               for (final CalculatorGroup group in groups)
-                ListTile(
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(group.name),
-                  selected: activeRouteId == 'group:${group.id}',
-                  onTap: () => _navigate(context, ref, 'group:${group.id}'),
-                ),
+                () {
+                  final FormulaIconOption icon = formulaIconByKey(group.iconKey, options: iconOptions);
+                  return ListTile(
+                    leading: CircleAvatar(radius: 14, child: Text(icon.glyph, style: const TextStyle(fontSize: 13))),
+                    title: Text(group.name),
+                    selected: activeRouteId == 'group:${group.id}',
+                    onTap: () => _navigate(context, ref, 'group:${group.id}'),
+                  );
+                }(),
             ],
             // ── System ─────────────────────────────────────────────────
             const Divider(),
